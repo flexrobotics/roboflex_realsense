@@ -1,7 +1,7 @@
 # python/CMakeLists.txt
 cmake_minimum_required(VERSION 3.25)
 
-project(roboflex_realsense_ext VERSION 0.1.0 DESCRIPTION "roboflex realsense python wrapping")
+project(roboflex_realsense_ext VERSION 0.1.1 DESCRIPTION "roboflex realsense python wrapping")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
