@@ -8,7 +8,7 @@ using namespace roboflex;
 int main()
 {
     realsense::RealsenseConfig config;
-    config.align_to = realsense::CameraType::RGB;
+    config.align_to = realsense::CameraAlignment::RGB;
     config.rgb_settings.fps = 30;
     config.rgb_settings.width = 640;
     config.rgb_settings.height = 480;

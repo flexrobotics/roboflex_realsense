@@ -32,17 +32,35 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
         .def_readwrite("persistence_control", &TFP::persistence_control)
     ;
 
+    py::enum_<CameraAlignment>(m, "CameraAlignment")
+        .value("NONE", CameraAlignment::NONE)
+        .value("RGB", CameraAlignment::RGB)
+        .value("DEPTH", CameraAlignment::DEPTH)
+    ;
+
     py::enum_<CameraType>(m, "CameraType")
-        .value("NONE", CameraType::NONE)
         .value("RGB", CameraType::RGB)
         .value("DEPTH", CameraType::DEPTH)
+        .value("IR1", CameraType::IR1)
+        .value("IR2", CameraType::IR2)
     ;
+
+    m.def("camera_type_or", [](std::vector<CameraType> l) { 
+        assert(l.size() > 0);
+        CameraType r = l[0];
+        for (size_t i = 1; i < l.size(); i++) {
+            r = r | l[i];
+        }
+        return r;
+    });
+    m.def("camera_type_contains", &contains);
 
     using Cfg = RealsenseConfig;
     const auto default_cfg = Cfg{};
     py::class_<Cfg>(m, "Config")
         .def(
-            py::init([](CameraType align_to,
+            py::init([](CameraType camera_type, 
+                        CameraAlignment align_to,
                         bool prioritize_ae,
                         std::unordered_map<std::string, unsigned int>& rgb_settings,
                         std::unordered_map<std::string, unsigned int>& depth_settings,
@@ -51,6 +69,7 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
                         std::optional<int> hole_filling_mode,
                         std::optional<int> decimation_filter) {
                 return std::unique_ptr<Cfg>(new Cfg{
+                    camera_type,
                     align_to,
                     prioritize_ae,
                     {
@@ -69,6 +88,7 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
                     decimation_filter,
                 });
             }),
+            py::arg("camera_type")    = default_cfg.camera_type,
             py::arg("align_to")       = default_cfg.align_to,
             py::arg("prioritize_ae")  = default_cfg.prioritize_ae,
             py::arg("rgb_settings")   = std::unordered_map<std::string, unsigned int>({
@@ -85,6 +105,7 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
             py::arg("temporal_filter_parameters") = default_cfg.temporal_filter_parameters,
             py::arg("hole_filling_mode") = default_cfg.hole_filling_mode,
             py::arg("decimation_filter") = default_cfg.decimation_filter)
+        .def_readwrite("camera_type", &Cfg::camera_type)
         .def_readwrite("align_to", &Cfg::align_to)
         .def_readwrite("prioritize_ae", &Cfg::prioritize_ae)
         .def_readwrite("rgb_settings", &Cfg::rgb_settings)
@@ -117,10 +138,22 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
             r = f->get_depth();
             return r;
         })
+        .def_property_readonly("ir1", [](std::shared_ptr<RealsenseFrameset> f){
+            xt::xtensor<uint8_t, 2> r;
+            r = f->get_ir1();
+            return r;
+        })
+        .def_property_readonly("ir2", [](std::shared_ptr<RealsenseFrameset> f){
+            xt::xtensor<uint8_t, 2> r;
+            r = f->get_ir2();
+            return r;
+        })
         .def_property_readonly("aligned_to", &RealsenseFrameset::get_aligned_to)
         .def_property_readonly("serial_number", &RealsenseFrameset::get_serial_number)
         .def_property_readonly("camera_k_rgb", &RealsenseFrameset::get_camera_k_rgb)
         .def_property_readonly("camera_k_depth", &RealsenseFrameset::get_camera_k_depth)
+        .def_property_readonly("camera_k_ir1", &RealsenseFrameset::get_camera_k_ir1)
+        .def_property_readonly("camera_k_ir2", &RealsenseFrameset::get_camera_k_ir2)
         .def_property_readonly("frame_number", &RealsenseFrameset::get_frame_number)
         .def_property_readonly("timestamp", &RealsenseFrameset::get_timestamp)
         .def("__repr__", &RealsenseFrameset::to_string)
@@ -136,8 +169,11 @@ PYBIND11_MODULE(roboflex_realsense_ext, m) {
         .def_static("get_one_sensor", &RealsenseSensor::get_one_sensor)
         .def("produce", &RealsenseSensor::produce)
         .def("get_camera_k", &RealsenseSensor::get_camera_k)
+        .def("set_laser_on_off", &RealsenseSensor::set_laser_on_off)
         .def_property_readonly("depth_camera_k", &RealsenseSensor::get_depth_camera_k)
         .def_property_readonly("color_camera_k", &RealsenseSensor::get_color_camera_k)
+        .def_property_readonly("ir1_camera_k", &RealsenseSensor::get_ir1_camera_k)
+        .def_property_readonly("ir2_camera_k", &RealsenseSensor::get_ir2_camera_k)
         .def_property_readonly("width_pixels_color", &RealsenseSensor::get_width_pixels_color)
         .def_property_readonly("height_pixels_color", &RealsenseSensor::get_height_pixels_color)
         .def_property_readonly("width_pixels_depth", &RealsenseSensor::get_width_pixels_depth)

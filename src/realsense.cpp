@@ -3,10 +3,20 @@
 namespace roboflex {
 namespace realsense {
 
-string align_to_to_string(const CameraType align_to)
+string camera_type_to_string(const CameraType camera_type)
 {
-    return align_to == CameraType::NONE ? "NONE" :
-           align_to == CameraType::RGB ? "RGB" : 
+    string s = "";
+    if (contains(camera_type, CameraType::RGB)) s += "RGB ";
+    if (contains(camera_type, CameraType::DEPTH)) s += "DEPTH ";
+    if (contains(camera_type, CameraType::IR1)) s += "IR1 ";
+    if (contains(camera_type, CameraType::IR2)) s += "IR2 ";
+    return s;
+}
+
+string align_to_string(const CameraAlignment align_to)
+{
+    return align_to == CameraAlignment::NONE ? "NONE" :
+           align_to == CameraAlignment::RGB ? "RGB" : 
            "DEPTH";
 }
 
@@ -58,6 +68,8 @@ rs2_stream stream_type_from_camera_type(const CameraType& cam)
     switch (cam) {
         case CameraType::RGB: return RS2_STREAM_COLOR;
         case CameraType::DEPTH: return RS2_STREAM_DEPTH;
+        case CameraType::IR1: return RS2_STREAM_INFRARED;
+        case CameraType::IR2: return RS2_STREAM_INFRARED;
         default: throw runtime_error("`CameraType` not valid!");
     }
 }
@@ -70,37 +82,102 @@ RealsenseFrameset::RealsenseFrameset(
     double t1,
     const string& serial_number,
     const rs2::frameset& rs_frameset,
-    const CameraType aligned_to,
-    const CameraK& camera_k_rgb,
-    const CameraK& camera_k_depth):
+    const CameraType camera_type,
+    const CameraAlignment aligned_to,
+    const optional<CameraK>& camera_k_rgb,
+    const optional<CameraK>& camera_k_depth,
+    const optional<CameraK>& camera_k_ir1,
+    const optional<CameraK>& camera_k_ir2):
         Message(ModuleName, MessageName)
 {
-    rs2::video_frame rs_rgb = rs_frameset.get_color_frame();
-    RGBFrame rgb = xt::adapt(
-        static_cast<const RGBFrame::value_type*>(rs_rgb.get_data()),
-        rs_rgb.get_data_size() / sizeof(RGBFrame::value_type),
-        xt::no_ownership(),
-        xt::shape({rs_rgb.get_height(), rs_rgb.get_width(), 3}));
-
-    rs2::depth_frame rs_depth = rs_frameset.get_depth_frame();
-    DepthFrame depth = xt::adapt(
-        static_cast<const DepthFrame::value_type*>(rs_depth.get_data()),
-        rs_depth.get_data_size() / sizeof(DepthFrame::value_type),
-        xt::no_ownership(),
-        xt::shape({rs_depth.get_height(), rs_depth.get_width()}));
-
     flexbuffers::Builder fbb = get_builder();
     WriteMapRoot(fbb, [&]() {
         fbb.Double("t0", t0);
         fbb.Double("t1", t1);
         fbb.String("serial_number", serial_number);
-        fbb.Double("t", rs_rgb.get_timestamp() * 0.001);
-        fbb.UInt("n", (uint64_t)rs_rgb.get_frame_number());
+        fbb.UInt("camera_type", static_cast<uint8_t>(camera_type));
         fbb.UInt("aligned_to", static_cast<uint8_t>(aligned_to));
-        serialization::serialize_flex_tensor(fbb, rgb, "rgb");
-        serialization::serialize_flex_tensor(fbb, depth, "depth");
-        serialization::serialize_flex_tensor(fbb, camera_k_rgb, "camera_k_rgb");
-        serialization::serialize_flex_tensor(fbb, camera_k_depth, "camera_k_depth");
+
+        double t = 0;
+        uint64_t n = 0;
+
+        if (contains(camera_type, CameraType::RGB)) {
+            rs2::video_frame rs_rgb = rs_frameset.get_color_frame();
+            RGBFrame rgb = xt::adapt(
+                static_cast<const RGBFrame::value_type*>(rs_rgb.get_data()),
+                rs_rgb.get_data_size() / sizeof(RGBFrame::value_type),
+                xt::no_ownership(),
+                xt::shape({rs_rgb.get_height(), rs_rgb.get_width(), 3}));
+
+            if (t == 0) {
+                t = rs_rgb.get_timestamp();
+            }
+            if (n == 0) {
+                n = (uint64_t)rs_rgb.get_frame_number();
+            }
+            serialization::serialize_flex_tensor(fbb, rgb, "rgb");
+            serialization::serialize_flex_tensor(fbb, camera_k_rgb.value(), "camera_k_rgb");
+        }
+
+        if (contains(camera_type, CameraType::DEPTH)) {
+            rs2::depth_frame rs_depth = rs_frameset.get_depth_frame();
+            DepthFrame depth = xt::adapt(
+                static_cast<const DepthFrame::value_type*>(rs_depth.get_data()),
+                rs_depth.get_data_size() / sizeof(DepthFrame::value_type),
+                xt::no_ownership(),
+                xt::shape({rs_depth.get_height(), rs_depth.get_width()}));
+
+            if (t == 0) {
+                t = rs_depth.get_timestamp();
+            }
+            if (n == 0) {
+                n = (uint64_t)rs_depth.get_frame_number();
+            }
+
+            serialization::serialize_flex_tensor(fbb, depth, "depth");
+            serialization::serialize_flex_tensor(fbb, camera_k_depth.value(), "camera_k_depth");
+        }
+
+        if (contains(camera_type, CameraType::IR1)) {
+            rs2::video_frame rs_ir = rs_frameset.get_infrared_frame(1);
+            IRFrame ir = xt::adapt(
+                static_cast<const IRFrame::value_type*>(rs_ir.get_data()),
+                rs_ir.get_data_size() / sizeof(IRFrame::value_type),
+                xt::no_ownership(),
+                xt::shape({rs_ir.get_height(), rs_ir.get_width()}));
+
+            if (t == 0) {
+                t = rs_ir.get_timestamp();
+            }
+            if (n == 0) {
+                n = (uint64_t)rs_ir.get_frame_number();
+            }
+
+            serialization::serialize_flex_tensor(fbb, ir, "ir1");
+            serialization::serialize_flex_tensor(fbb, camera_k_ir1.value(), "camera_k_ir1");
+        }
+
+        if (contains(camera_type, CameraType::IR2)) {
+            rs2::video_frame rs_ir = rs_frameset.get_infrared_frame(2);
+            IRFrame ir = xt::adapt(
+                static_cast<const IRFrame::value_type*>(rs_ir.get_data()),
+                rs_ir.get_data_size() / sizeof(IRFrame::value_type),
+                xt::no_ownership(),
+                xt::shape({rs_ir.get_height(), rs_ir.get_width()}));
+
+            if (t == 0) {
+                t = rs_ir.get_timestamp();
+            }
+            if (n == 0) {
+                n = (uint64_t)rs_ir.get_frame_number();
+            }
+
+            serialization::serialize_flex_tensor(fbb, ir, "ir2");
+            serialization::serialize_flex_tensor(fbb, camera_k_ir2.value(), "camera_k_ir2");
+        }
+
+        fbb.Double("t", t * 0.001);
+        fbb.UInt("n", n);
     });
 }
 
@@ -112,10 +189,25 @@ void RealsenseFrameset::print_on(ostream& os) const
        << " t: " << fixed << setprecision(3) << get_timestamp()
        << " serial_number: " << get_serial_number()
        << " frame_number: " << get_frame_number()
-       << " aligned_to: " << align_to_to_string(get_aligned_to())
-       << " rgb: (" << xt::adapt(get_rgb().shape()) << ")"
-       << " depth: (" << xt::adapt(get_depth().shape()) << ")"
-       << ">";
+       << " camera_type: " << camera_type_to_string(get_camera_type())
+       << " aligned_to: " << align_to_string(get_aligned_to());
+
+    if (contains(get_camera_type(), CameraType::RGB)) {
+        os << " rgb: (" << xt::adapt(get_rgb().shape()) << ")";
+    }
+    if (contains(get_camera_type(), CameraType::DEPTH)) {
+        os << " get_depth: (" << xt::adapt(get_depth().shape()) << ")";
+    }
+    if (contains(get_camera_type(), CameraType::IR1)) {
+        os << " ir1: (" << xt::adapt(get_ir1().shape()) << ")";
+    }
+    if (contains(get_camera_type(), CameraType::IR2)) {
+        os << " ir2: (" << xt::adapt(get_ir2().shape()) << ")";
+    }
+
+    os << " ";
+    Message::print_on(os);
+    os << ">";
 }
 
 
@@ -139,7 +231,8 @@ string RealsenseConfig::to_string() const
 {
     stringstream sst;
     sst << "<RealsenseConfig"
-        << " align_to: " << align_to_to_string(align_to)
+        << " camera_type: " << camera_type_to_string(camera_type)
+        << " align_to: " << align_to_string(align_to)
         << " prioritize_ae: " << prioritize_ae
         << " rgb settings: " << camera_settings_to_string(rgb_settings)
         << " depth settings: " << camera_settings_to_string(depth_settings)
@@ -179,19 +272,43 @@ RealsenseSensor::RealsenseSensor(
     auto& depth_settings = config.depth_settings;
     auto& rgb_settings   = config.rgb_settings;
 
-    rs_cfg.enable_stream(
-        RS2_STREAM_DEPTH,
-        depth_settings.width,
-        depth_settings.height,
-        RS2_FORMAT_Z16,
-        depth_settings.fps);
+    if (contains(config.camera_type, CameraType::DEPTH)) {
+        rs_cfg.enable_stream(
+            RS2_STREAM_DEPTH,
+            depth_settings.width,
+            depth_settings.height,
+            RS2_FORMAT_Z16,
+            depth_settings.fps);
+    }
 
-    rs_cfg.enable_stream(
-        RS2_STREAM_COLOR,
-        rgb_settings.width,
-        rgb_settings.height,
-        RS2_FORMAT_RGB8,
-        rgb_settings.fps);
+    if (contains(config.camera_type, CameraType::RGB)) {
+        rs_cfg.enable_stream(
+            RS2_STREAM_COLOR,
+            rgb_settings.width,
+            rgb_settings.height,
+            RS2_FORMAT_RGB8,
+            rgb_settings.fps);
+    }
+
+    if (contains(config.camera_type, CameraType::IR1)) {
+        rs_cfg.enable_stream(
+            RS2_STREAM_INFRARED,
+            1,
+            rgb_settings.width,
+            rgb_settings.height,
+            RS2_FORMAT_Y8,
+            rgb_settings.fps);
+    }
+
+    if (contains(config.camera_type, CameraType::IR2)) {
+        rs_cfg.enable_stream(
+            RS2_STREAM_INFRARED,
+            2,
+            rgb_settings.width,
+            rgb_settings.height,
+            RS2_FORMAT_Y8,
+            rgb_settings.fps);
+    }
 
     pipe = rs2::pipeline(ctx);
 
@@ -236,8 +353,8 @@ RealsenseSensor::RealsenseSensor(
         }
     }
 
-    if (config.align_to != CameraType::NONE) {
-        this->aligner = rs2::align((config.align_to == CameraType::RGB) ? RS2_STREAM_COLOR : RS2_STREAM_DEPTH);
+    if (config.align_to != CameraAlignment::NONE) {
+        this->aligner = rs2::align((config.align_to == CameraAlignment::RGB) ? RS2_STREAM_COLOR : RS2_STREAM_DEPTH);
     }
 
     if (config.temporal_filter_parameters != nullopt) {
@@ -271,24 +388,53 @@ RealsenseSensor::RealsenseSensor(
         depth_sensor.set_option(RS2_OPTION_VISUAL_PRESET, vispresetthissux);
     }
 
-
     // Read camera k matrices
-    auto color_stream = get_video_stream_profile(CameraType::RGB);
-    auto depth_stream = get_video_stream_profile(CameraType::DEPTH);
-    CameraIntrinsics color_intrinsics = color_stream.get_intrinsics();
-    CameraIntrinsics depth_intrinsics = depth_stream.get_intrinsics();
-    camera_k_rgb = color_intrinsics.to_k_matrix();
-    camera_k_depth = depth_intrinsics.to_k_matrix();
+    if (contains(config.camera_type, CameraType::RGB)) {
+        auto stream = get_video_stream_profile(CameraType::RGB);
+        CameraIntrinsics intrinsics = stream.get_intrinsics();
+        camera_k_rgb = intrinsics.to_k_matrix();
 
-    // When the user specifies '0' for some settings, it will
-    // pick something arbitrary. So we need to read these values
-    // to determine what they actually ended up being.
-    width_pixels_color = color_intrinsics.width;
-    height_pixels_color = color_intrinsics.height;
-    width_pixels_depth = depth_intrinsics.width;
-    height_pixels_depth = depth_intrinsics.height;
-    fps_color = color_stream.fps();
-    fps_depth = depth_stream.fps();
+        // When the user specifies '0' for some settings, it will
+        // pick something arbitrary. So we need to read these values
+        // to determine what they actually ended up being.
+        width_pixels_color = intrinsics.width;
+        height_pixels_color = intrinsics.height;
+        fps_color = stream.fps();
+    }
+
+    if (contains(config.camera_type, CameraType::DEPTH)) {
+        auto stream = get_video_stream_profile(CameraType::DEPTH);
+        CameraIntrinsics intrinsics = stream.get_intrinsics();
+        camera_k_depth = intrinsics.to_k_matrix();
+
+        width_pixels_depth = intrinsics.width;
+        height_pixels_depth = intrinsics.height;
+        fps_depth = stream.fps();
+    }
+
+    if (contains(config.camera_type, CameraType::IR1)) {
+        auto stream = get_video_stream_profile(CameraType::IR1);
+        CameraIntrinsics intrinsics = stream.get_intrinsics();
+        camera_k_ir1 = intrinsics.to_k_matrix();
+
+        if (width_pixels_depth == 0) {
+            width_pixels_depth = intrinsics.width;
+            height_pixels_depth = intrinsics.height;
+            fps_depth = stream.fps();
+        }
+    }
+
+    if (contains(config.camera_type, CameraType::IR2)) {
+        auto stream = get_video_stream_profile(CameraType::IR2);
+        CameraIntrinsics intrinsics = stream.get_intrinsics();
+        camera_k_ir2 = intrinsics.to_k_matrix();
+
+        if (width_pixels_depth == 0) {
+            width_pixels_depth = intrinsics.width;
+            height_pixels_depth = intrinsics.height;
+            fps_depth = stream.fps();
+        }
+    }
 
     extant_devices.insert(serial_number);
 }
@@ -313,15 +459,16 @@ shared_ptr<RealsenseSensor> RealsenseSensor::get_one_sensor(const RealsenseConfi
 rs2::video_stream_profile RealsenseSensor::get_video_stream_profile(const CameraType& cam) const
 {
     rs2_stream stream_type = stream_type_from_camera_type(cam);
-    return this->pipe.get_active_profile().get_stream(stream_type).as<rs2::video_stream_profile>();
+    return get_active_profile().get_stream(stream_type).as<rs2::video_stream_profile>();
 }
 
 CameraK RealsenseSensor::get_camera_k(const CameraType& cam) const
 {
-    if (cam == CameraType::NONE) {
-        throw runtime_error("Cannot get_camera_k of NONE camera type.");
-    }
-    return cam == CameraType::RGB ? camera_k_rgb : camera_k_depth;
+    return 
+        cam == CameraType::RGB ? camera_k_rgb :
+        cam == CameraType::DEPTH ? camera_k_depth :
+        cam == CameraType::IR1 ? camera_k_ir1 :
+        camera_k_ir2;
 }
 
 set<string> RealsenseSensor::get_connected_device_serial_numbers()
@@ -354,24 +501,31 @@ void RealsenseSensor::produce()
     // Perform hole filling if there is a hole filling filter
     if (this->hole_filling_filter) fs = this->hole_filling_filter->process(fs);
 
-    // Get some values we need to...
-    const CameraType aligned_to = config.align_to;
-    const string serial_number = get_serial_number();
-    const CameraK camera_k_rgb = get_color_camera_k();
-    const CameraK camera_k_depth = get_depth_camera_k();
-
     // ... create a message
     auto msg = make_shared<RealsenseFrameset>(
         t0,
         t1,
-        serial_number,
+        get_serial_number(),
         fs,
-        aligned_to,
-        camera_k_rgb,
-        camera_k_depth);
+        config.camera_type,
+        config.align_to,
+        get_color_camera_k(),
+        get_depth_camera_k(), 
+        get_ir1_camera_k(),
+        get_ir2_camera_k());
 
     // signal
     this->signal(msg);
+}
+
+void RealsenseSensor::set_laser_on_off(bool on) 
+{
+    auto ds = get_depth_sensor();
+    if (ds.supports(RS2_OPTION_EMITTER_ENABLED)) {
+        ds.set_option(RS2_OPTION_EMITTER_ENABLED, on ? 1.0f : 0.0f);
+    } else {
+        throw std::runtime_error("Device does not support controlling the emitter");
+    }
 }
 
 void RealsenseSensor::child_thread_fn()
@@ -388,6 +542,8 @@ string RealsenseSensor::to_string() const
         << " serial_number: " << get_serial_number() << std::endl
         << " color: (" << get_height_pixels_color() << ", " << get_width_pixels_color() << ") AT " << get_fps_color() << " FPS, K=" << std::endl << get_color_camera_k() << ", " << std::endl
         << " depth: (" << get_height_pixels_depth() << ", " << get_width_pixels_depth() << ") AT " << get_fps_depth() << " FPS, K=" << std::endl << get_depth_camera_k() << ", " << std::endl
+        << " ir1: (" << get_height_pixels_depth() << ", " << get_width_pixels_depth() << ") AT " << get_fps_depth() << " FPS, K=" << std::endl << get_ir1_camera_k() << ", " << std::endl
+        << " ir2: (" << get_height_pixels_depth() << ", " << get_width_pixels_depth() << ") AT " << get_fps_depth() << " FPS, K=" << std::endl << get_ir2_camera_k() << ", " << std::endl
         << " config: " << get_config().to_string()
         << " " << Node::to_string()
         << ">";

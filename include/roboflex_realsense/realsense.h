@@ -15,9 +15,33 @@ using namespace std;
 
 using RGBFrame   = xt::xtensor<uint8_t, 3>;   // [row, col, color_channel], intensity
 using DepthFrame = xt::xtensor<uint16_t, 2>;  // [row, col], depth in millimeters
+using IRFrame    = xt::xtensor<uint8_t, 2>;   // [row, col], infrared intensity
 using CameraK    = xt::xtensor<float, 2>;     // 3x3 intrinsics matrix
 
-enum class CameraType: uint8_t { NONE, RGB, DEPTH };
+enum class CameraAlignment: uint8_t { 
+    NONE, 
+    RGB, 
+    DEPTH 
+};
+
+enum class CameraType: uint8_t { 
+    RGB     = 0b0001,
+    DEPTH   = 0b0010, 
+    IR1     = 0b0100, 
+    IR2     = 0b1000
+};
+
+inline CameraType operator|(CameraType a, CameraType b) {
+    return static_cast<CameraType>(static_cast<uint8_t>(a) | static_cast<uint8_t>(b));
+}
+
+inline CameraType operator&(CameraType a, CameraType b) {
+    return static_cast<CameraType>(static_cast<uint8_t>(a) & static_cast<uint8_t>(b));
+}
+
+inline bool contains(CameraType combined, CameraType check) {
+    return (combined & check) == check;
+}
 
 class RealsenseFrameset: public core::Message {
 public:
@@ -30,9 +54,12 @@ public:
         double t1,
         const string& serial_number,
         const rs2::frameset& rs_frameset,
-        const CameraType aligned_to,
-        const CameraK& camera_k_rgb,
-        const CameraK& camera_k_depth);
+        const CameraType camera_type,
+        const CameraAlignment aligned_to,
+        const optional<CameraK>& camera_k_rgb,
+        const optional<CameraK>& camera_k_depth,
+        const optional<CameraK>& camera_k_ir1,
+        const optional<CameraK>& camera_k_ir2);
 
     double get_t0() const {
         return root_map()["t0"].AsDouble();
@@ -48,6 +75,14 @@ public:
 
     const serialization::flextensor_adaptor<uint16_t> get_depth() const {
         return serialization::deserialize_flex_tensor<uint16_t, 2>(root_map()["depth"]);
+    }
+
+    const serialization::flextensor_adaptor<uint8_t> get_ir1() const {
+        return serialization::deserialize_flex_tensor<uint8_t, 2>(root_map()["ir1"]);
+    }
+
+    const serialization::flextensor_adaptor<uint8_t> get_ir2() const {
+        return serialization::deserialize_flex_tensor<uint8_t, 2>(root_map()["ir2"]);
     }
 
     double get_timestamp() const {
@@ -70,9 +105,22 @@ public:
         return serialization::deserialize_flex_tensor<float, 2>(root_map()["camera_k_depth"]);
     }
 
-    CameraType get_aligned_to() const {
-        uint8_t at =  root_map()["aligned_to"].AsUInt8();
+    CameraK get_camera_k_ir1() const {
+        return serialization::deserialize_flex_tensor<float, 2>(root_map()["camera_k_ir1"]);
+    }
+
+    CameraK get_camera_k_ir2() const {
+        return serialization::deserialize_flex_tensor<float, 2>(root_map()["camera_k_ir2"]);
+    }
+
+    CameraType get_camera_type() const {
+        uint8_t at =  root_map()["camera_type"].AsUInt8();
         return static_cast<CameraType>(at);
+    }
+
+    CameraAlignment get_aligned_to() const {
+        uint8_t at =  root_map()["aligned_to"].AsUInt8();
+        return static_cast<CameraAlignment>(at);
     }
 
     void print_on(ostream& os) const override;
@@ -118,9 +166,11 @@ struct CameraIntrinsics {
 
 struct RealsenseConfig
 {
+    CameraType camera_type = CameraType::RGB | CameraType::DEPTH;
+
     /// The realsense has two sensors - RGB and depth. This controls which one the
     /// frames get aligned to. If nullopt, no alignment is performed
-    CameraType align_to = CameraType::NONE;
+    CameraAlignment align_to = CameraAlignment::NONE;
 
     /// When `true`, allows fps to drop in order to better expose frames,
     /// such as in dimly lit environments
@@ -153,7 +203,6 @@ struct RealsenseConfig
     optional<TemporalFilterParameters> temporal_filter_parameters = nullopt;
 
     optional<int> hole_filling_mode = nullopt;
-
     optional<int> decimation_filter = nullopt;
 
     string to_string() const;
@@ -179,6 +228,8 @@ public:
     CameraIntrinsics get_intrinsics(const CameraType& cam) const;
     CameraK get_color_camera_k() const { return camera_k_rgb; }
     CameraK get_depth_camera_k() const { return camera_k_depth; }
+    CameraK get_ir1_camera_k() const { return camera_k_ir1; }
+    CameraK get_ir2_camera_k() const { return camera_k_ir2; }
     CameraK get_camera_k(const CameraType& cam) const;
     int get_width_pixels_color() const { return width_pixels_color; }
     int get_height_pixels_color() const { return height_pixels_color; }
@@ -187,7 +238,14 @@ public:
     int get_fps_color() const { return fps_color; }
     int get_fps_depth() const { return fps_depth; }
 
+    void set_laser_on_off(bool on);
+
     string to_string() const override;
+
+    rs2::pipeline_profile get_active_profile() const { return pipe.get_active_profile();}
+    rs2::device get_device() const { return get_active_profile().get_device(); }
+    rs2::depth_sensor get_color_sensor() const { return get_device().first<rs2::color_sensor>(); }
+    rs2::depth_sensor get_depth_sensor() const { return get_device().first<rs2::depth_sensor>(); }
 
 protected:
     void child_thread_fn() override;
@@ -197,12 +255,15 @@ protected:
     string serial_number;
     CameraK camera_k_rgb;
     CameraK camera_k_depth;
-    int width_pixels_color;
-    int height_pixels_color;
-    int width_pixels_depth;
-    int height_pixels_depth;
-    int fps_color;
-    int fps_depth;
+    CameraK camera_k_ir1;
+    CameraK camera_k_ir2;
+
+    int width_pixels_color = 0;
+    int height_pixels_color = 0;
+    int width_pixels_depth = 0;
+    int height_pixels_depth = 0;
+    int fps_color = 0;
+    int fps_depth = 0;
 
     rs2::pipeline pipe;
     optional<rs2::align> aligner;

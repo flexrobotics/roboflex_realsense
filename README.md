@@ -69,6 +69,10 @@ Use it like so:
     # production), and don't want to use "start".
     sensor.produce()
 
+    # You can turn the IR laser off and on
+    sensor.set_laser_on_off(False)
+    sensor.set_laser_on_off(True)
+
 
 ## Messages
 
@@ -90,6 +94,12 @@ API:
     # numpy array of shape=(height, width), dtype=uint16
     message.depth -> np.ndarray
 
+    # numpy array of shape=(height, width), dtype=uint8
+    message.ir1 -> np.ndarray
+
+    # numpy array of shape=(height, width), dtype=uint8
+    message.ir2 -> np.ndarray
+
     # which camera (if any) the frame is aligned to
     message.aligned_to -> rr.CameraType
 
@@ -101,6 +111,12 @@ API:
 
     # the depth camera k of the camera that produced this frameset
     message.camera_k_depth -> numpy array of (3, 3)
+
+    # the ir1 camera k of the camera that produced this frameset
+    message.camera_k_ir1 -> numpy array of (3, 3)
+
+    # the ir2 camera k of the camera that produced this frameset
+    message.camera_k_ir2 -> numpy array of (3, 3)
 
     # the index, from the device, of this frameset
     message.frame_number -> int
@@ -124,6 +140,12 @@ DYNOFLEX:
     # numpy array of shape=(height, width), dtype=uint16
     d["depth"] -> np.ndarray
 
+    # numpy array of shape=(height, width), dtype=uint8
+    d["ir1"] -> np.ndarray
+
+    # numpy array of shape=(height, width), dtype=uint8
+    d["ir2"] -> np.ndarray
+
     # which camera (if any) the frame is aligned to
     d["aligned_to"] -> rr.CameraType
 
@@ -135,6 +157,12 @@ DYNOFLEX:
 
     # the depth camera k of the camera that produced this frameset
     d["camera_k_depth"] -> numpy array of (3, 3)
+
+    # the camera k of the infrared camera 1 that produced this frameset
+    d["camera_k_ir1"] -> numpy array of (3, 3)
+
+    # the camera k of the infrared camera 2 that produced this frameset
+    d["camera_k_ir2"] -> numpy array of (3, 3)
 
     # the index, from the device, of this frameset
     d["n"] -> int
@@ -149,6 +177,20 @@ Some types used for configuration
 Some enums:
 
     CameraType:
+        RGB,
+        DEPTH,
+        IR1,    # raw infrared camera1
+        IR2     # raw infrared camera2
+    
+    # You can OR these together like so:
+
+    my_cameras = camera_type_or([CameraType.RGB, CameraType.DEPTH, etc])
+
+    # You can test for camera types:
+
+    has_rgb = camera_type_contains(my_camera_type, CameraType.RGB)
+
+    CameraAlignment:
         NONE,
         RGB,
         DEPTH
@@ -177,7 +219,8 @@ Config:
 
     # all paramters are optional - defaults shown below
     c = rr.Config(
-        align_to: rr.CameraType = rr.CameraType.NONE,
+        camera_type: rr.CameraType = CameraType.RGB | CameraType.DEPTH,
+        align_to: rr.CameraAlignment = rr.CameraAlignment.NONE,
         prioritize_ae: Bool = False,
         rgb_settings: Dict[str, int] = {
             "fps": 0,
@@ -195,8 +238,11 @@ Config:
         decimation_filter: Optional[int] = None,
     )
 
+    # which actual cameras are in use - this a bitmask, OR-ed together
+    c.camera_type -> rr.CameraType
+
     # which camera the frames will be aligned to (if any)
-    c.align_to -> rr.CameraType
+    c.align_to -> rr.CameraAligment
 
     # When `true`, allows fps to drop in order to better expose
     # frames, such as in dimly lit environments
@@ -216,7 +262,7 @@ Config:
 
     # the 'hole filling mode', if any - can be None
     # 0: fill_from_left
-    # 1: farest_from_around
+    # 1: farthest_from_around
     # 2: nearest_from_around
     c.hole_filling_mode -> int
 

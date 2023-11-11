@@ -50,7 +50,7 @@ long_description = (Path(__file__).parent / "README.md").read_text()
 
 setup(
     name='roboflex.realsense',
-    version='0.1.3',
+    version='0.1.5',
     description='Roboflex Realsense Library',
     author='Colin Prepscius',
     author_email='colinprepscius@gmail.com',
