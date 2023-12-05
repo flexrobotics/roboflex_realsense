@@ -78,15 +78,6 @@ target_include_directories(roboflex_realsense PUBLIC
 target_link_libraries(roboflex_realsense PUBLIC 
     roboflex_core 
     realsense2
-
-    # Unfortunately, we need to link against all these libraries
-    # because they are used by roboflex_core, and cmake doesn't
-    # seem to be transitivily doing it's thing. Urgh, someone help.
-    flatbuffers_util 
-    xtensor 
-    xsimd 
-    xtl
-    Eigen3::Eigen
 )
 
 
