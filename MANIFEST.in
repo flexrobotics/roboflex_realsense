@@ -1,4 +1,5 @@
 include CMakeLists.txt
+include Config.cmake.in
 include python/CMakeLists.txt
 recursive-include python *.cpp
 recursive-include examples *.cpp

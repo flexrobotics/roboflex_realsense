@@ -1,0 +1,6 @@
+include(CMakeFindDependencyMacro)
+
+# List the dependencies here
+find_dependency(roboflex_core REQUIRED)
+
+include("${CMAKE_CURRENT_LIST_DIR}/roboflex_realsenseTargets.cmake")
