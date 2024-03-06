@@ -105,6 +105,13 @@ install(TARGETS roboflex_realsense
 install(DIRECTORY include/roboflex_realsense
     DESTINATION include
 )
+install(TARGETS roboflex_realsense
+    EXPORT roboflex_realsenseTargets
+    LIBRARY DESTINATION lib
+    ARCHIVE DESTINATION lib
+    RUNTIME DESTINATION bin
+    INCLUDES DESTINATION include
+)
 
 
 # --------------------
