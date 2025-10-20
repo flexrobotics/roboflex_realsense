@@ -1,8 +1,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <xtensor-python/pytensor.hpp>
-#include <xtensor/xio.hpp>
-#include <xtensor/xadapt.hpp>
+#include <xtensor/io/xio.hpp>
+#include <xtensor/containers/xadapt.hpp>
 #include "roboflex_core/core.h"
 #include "roboflex_realsense/realsense.h"
 

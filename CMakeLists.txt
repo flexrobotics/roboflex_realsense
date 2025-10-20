@@ -45,6 +45,14 @@ else()
     message(">>>>>>>>>>>> REALSENSE FOUND THROUGH find_package(realsense2 QUIET) <<<<<<<<<<<<<<<<")
 endif()
 
+if(TARGET realsense2::realsense2)
+    set(REALSENSE2_TARGET realsense2::realsense2)
+elseif(TARGET realsense2)
+    set(REALSENSE2_TARGET realsense2)
+else()
+    message(FATAL_ERROR "RealSense2 target not available – verify your librealsense installation.")
+endif()
+
 
 # download and build roboflex_core
 FetchContent_Declare(roboflex_core
@@ -77,7 +85,7 @@ target_include_directories(roboflex_realsense PUBLIC
 # Link against the necessary libraries
 target_link_libraries(roboflex_realsense PUBLIC 
     roboflex_core 
-    realsense2
+    ${REALSENSE2_TARGET}
 )
 
 

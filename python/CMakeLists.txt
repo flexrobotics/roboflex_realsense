@@ -20,14 +20,14 @@ include(FetchContent)
 # download and build pybind11
 FetchContent_Declare(pybind11
     GIT_REPOSITORY https://github.com/pybind/pybind11.git
-    GIT_TAG        v2.11.1
+    GIT_TAG        v2.13.6
 )
 FetchContent_MakeAvailable(pybind11)
 
 # download and build xtensor_python
 FetchContent_Declare(xtensor-python
     GIT_REPOSITORY https://github.com/xtensor-stack/xtensor-python.git
-    GIT_TAG        0.26.1
+    GIT_TAG        0.29.0
 )
 FetchContent_MakeAvailable(xtensor-python)
 
@@ -44,7 +44,7 @@ pybind11_add_module(roboflex_realsense_ext
 target_link_libraries(roboflex_realsense_ext PUBLIC 
     roboflex_realsense
     xtensor-python
-    realsense2 # we seem to need this to get librealsense2.so deployed
+    ${REALSENSE2_TARGET}
 )
 
 # If you have specific compile definitions or options for just the Python module
@@ -61,14 +61,14 @@ set_target_properties(roboflex_realsense_ext PROPERTIES
 )
 
 # Add a custom command to copy librealsense2.so after building
-add_custom_command(TARGET roboflex_realsense_ext POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:realsense2> 
-        $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54.2
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54.2
-        $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54
-)
+# add_custom_command(TARGET roboflex_realsense_ext POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#         $<TARGET_FILE:realsense2> 
+#         $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54.2
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#         $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54.2
+#         $<TARGET_FILE_DIR:roboflex_realsense_ext>/librealsense2.so.2.54
+# )
 
 # -------------------- 
 # install

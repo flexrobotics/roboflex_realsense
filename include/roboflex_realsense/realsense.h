@@ -2,8 +2,8 @@
 #define ROBOFLEX_REALSENSE__H
 
 #include <librealsense2/rs_advanced_mode.hpp>
-#include <xtensor/xadapt.hpp>
-#include <xtensor/xio.hpp>
+#include <xtensor/containers/xadapt.hpp>
+#include <xtensor/io/xio.hpp>
 #include "roboflex_core/core.h"
 
 namespace roboflex {
