@@ -34,8 +34,10 @@ if(NOT realsense2_FOUND)
 
     FetchContent_Declare(
         realsense2
-        GIT_REPOSITORY https://github.com/IntelRealSense/librealsense.git
-        GIT_TAG        v2.54.2
+        #GIT_REPOSITORY https://github.com/IntelRealSense/librealsense.git
+        #GIT_TAG        v2.54.2
+        GIT_REPOSITORY https://github.com/realsenseai/librealsense.git
+        GIT_TAG        v2.57.7
         #GIT_TAG        master
     )
     FetchContent_MakeAvailable(realsense2)
